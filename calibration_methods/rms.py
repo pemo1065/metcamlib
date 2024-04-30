@@ -100,7 +100,7 @@ class Calibration:
             i = np.array([(np.float64(p["image_star"][0]), np.float64(p["image_star"][1]), 0) for p in self.star_pairs])
         if iter < 1:
             self.platepar.distortion_type = "radial3-odd"
-        elif iter < 3:
+        elif iter < 2:
             self.platepar.distortion_type = "radial5-odd"
         else:
             self.platepar.distortion_type = "radial7-odd"

@@ -123,8 +123,9 @@ v
         self.pano.ReadPTOFile("lens.pto")
         self.pano.setOptimizeVector([('r', 'p', 'y', 'v', 'a', 'b', 'c', 'd', 'e'), ()])
         self.pano.WritePTOFile("lens.pto")
-        proc = subprocess.Popen(['autooptimiser', '-n', "lens.pto", '-o', "lens.pto"])
-        proc.wait()
+        with open("pano.log", "a") as out:
+            #subprocess.Popen(['cpclean', '-n', '1', '-o', "lens.pto", "lens.pto"], stdout=out, stderr=out).wait()
+            subprocess.Popen(['autooptimiser', '-n', "lens.pto", '-o', "lens.pto"], stdout=out, stderr=out).wait()
         self.pano.ReadPTOFile("lens.pto")
 
         img = self.pano.getImage(0)

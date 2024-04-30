@@ -100,6 +100,8 @@ def show_residuals(image, pairs, catalog_stars, image_stars, mask_file="mask.png
     pyplot.figure("Sky image")
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     pyplot.imshow(image)
+    pyplot.subplots_adjust(left=0.05, right=0.995, top=0.995, bottom=0.05)
+    print("\n== Matched stars and residuals ==")
     for pair in pairs:
         img_star = pair["image_star"]
         cat_star = pair["catalog_star"]
@@ -112,10 +114,9 @@ def show_residuals(image, pairs, catalog_stars, image_stars, mask_file="mask.png
         y_start = cat_star[1] - 0.5
 
         # Amplify the residual error for clearer visualization
-
         res_line_length = pair["residual_px"]*40
-        print("[%s, %s] Residual angle: %s, length: %s" % (x_start, y_start, pair["residual_angle"], res_line_length))
-        pyplot.plot([x_start, x_start + x_step*res_line_length], [y_start, y_start + y_step*res_line_length], "white")
+        print("  [%s, %s] Residual angle: %s, residual pixels: %s" % (x_start, y_start, pair["residual_angle"], pair["residual_px"]))
+        pyplot.plot([x_start, x_start + x_step*res_line_length], [y_start, y_start + y_step*res_line_length], "lightgray")
     img_stars_x = []
     img_stars_y = []
     for ims in image_stars:
@@ -124,14 +125,14 @@ def show_residuals(image, pairs, catalog_stars, image_stars, mask_file="mask.png
             if p["image_star"][0] == ims[0] and p["image_star"][1] == ims[1]:
                 paired = True
         if not paired:
-            img_stars_x.append(ims[0])
-            img_stars_y.append(ims[1])
+            img_stars_x.append(ims[0]-0.5)
+            img_stars_y.append(ims[1]-0.5)
 
     paired_img_stars_x = [p["image_star"][0]-0.5 for p in pairs]
     paired_img_stars_y = [p["image_star"][1]-0.5 for p in pairs]
     paired_cat_stars_x = [cs[0]-0.5 for cs in catalog_stars if mask is None or mask[min(1079, max(0, int(cs[1])))][min(1919, max(0, int(cs[0])))] != 0]
     paired_cat_stars_y = [cs[1]-0.5 for cs in catalog_stars if mask is None or mask[min(1079, max(0, int(cs[1])))][min(1919, max(0, int(cs[0])))] != 0]
-    pyplot.scatter(paired_img_stars_x, paired_img_stars_y, c='g', marker='.', linewidths=2)
+    pyplot.scatter(paired_img_stars_x, paired_img_stars_y, c='magenta', marker='x', linewidths=1)
     pyplot.scatter(paired_cat_stars_x, paired_cat_stars_y, c='b', marker='+', linewidths=1)
     pyplot.scatter(img_stars_x, img_stars_y, c='r', marker='.', linewidths=1)
 
@@ -156,10 +157,8 @@ def open_image(image_file):
     im = cv2.imread(image_file)
     im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
     return im
-    #return cv2.equalizeHist(im)
 
-
-def calib_iteration(image, catalog, calib, mask_file="mask.png", max_iter=5, initial_max_dist=15, max_dist_iter_reduction=2):
+def calib_iteration(image, catalog, calib, mask_file="mask.png", max_iter=5, initial_max_dist=15, max_dist_reduction=2):
     star_list = calib.get_star_list()
     image_stars = find_stars.detect(image, mask_file, star_list)
     calib.calibrate(np.array([(np.float64(ims[2]), np.float64(ims[3]), 0) for ims in image_stars]), np.array([(np.float64(ims[0]), np.float64(ims[1]), 0) for ims in image_stars]))
@@ -172,11 +171,8 @@ def calib_iteration(image, catalog, calib, mask_file="mask.png", max_iter=5, ini
     image_stars = find_stars.detect(image, mask_file)
     
     max_dist = initial_max_dist
-    pairs = pair_stars(catalog_stars, image_stars, max_dist_px=max_dist)
-    for p in pairs:
-        print("PAIR i: (%s, %s), c: (%s, %s)" % (p["image_star"][0], p["image_star"][1], p["catalog_star"][0], p["catalog_star"][1]))
-    i = 0
     last_rms_res = 1000
+    i = 1
     print("Cat length: %s" % len(catalog))
     while True:
         cra = np.array([cs[0] for cs in catalog])
@@ -196,9 +192,9 @@ def calib_iteration(image, catalog, calib, mask_file="mask.png", max_iter=5, ini
             return pairs, catalog_stars, image_stars
 
         rms_res = get_rms(pairs)
-        print("RMS after iteration %s: %s arcmin" % (i+1, rms_res))
-        if abs(rms_res - last_rms_res) < 0.01:
-            print("No RMS change last iteration. Skipping further iterations.")
+        print("RMS residual after iteration %s: %s arcmin" % (i, rms_res))
+        if abs(rms_res - last_rms_res) < 0.005:
+            print("No RMS residual change last iteration. Skipping further iterations.")
             return pairs, catalog_stars, image_stars
         last_rms_res = rms_res
 
@@ -208,25 +204,22 @@ def calib_iteration(image, catalog, calib, mask_file="mask.png", max_iter=5, ini
 
         i += 1
         # With each iteration we want to be more discriminate with how close a pair has to be to be counted
-        max_dist -= max_dist_iter_reduction
+        max_dist -= max_dist_reduction
 
 def get_rms(pairs):
     if len(pairs) == 0:
         return 0
     rms_sum = 0
     for p in pairs:
-        ims = p["image_star"]
-        cs = p["catalog_star"]
         rms_sum += (p["residual_angle"]*60)**2
-        #print("pair: [%s, %s, %s, %s], [%s, %s, %s, %s]. Angular res: %s, Px res: %s" % (ims[0], ims[1], ims[2], ims[3], cs[0], cs[1], cs[2], cs[3], p["residual_angle"], p["residual_px"]))
     rms = math.sqrt(rms_sum/len(pairs))
     return rms
 
 def calc_residuals(image_file, catalog, calib, mask_file="mask.png"):
     image = open_image(image_file)
-    pairs, catalog_stars, image_stars = calib_iteration(image, catalog, calib, mask_file, max_iter=5, initial_max_dist=15, max_dist_iter_reduction=2)
+    pairs, catalog_stars, image_stars = calib_iteration(image, catalog, calib, mask_file, max_iter=5, initial_max_dist=15, max_dist_reduction=2)
 
-    print("RMS: %s arcmins" % get_rms(pairs))
+    print("\n== RMS: %s arcmin" % get_rms(pairs))
     plot_residuals(pairs, 1920, 1080)
     show_residuals(image, pairs, catalog_stars, image_stars, mask_file)
 
@@ -235,7 +228,6 @@ def read_star_catalog(catalog_file, pos):
     planets = []
     for body in [ephem.Mercury(), ephem.Venus(), ephem.Mars(), ephem.Jupiter(), ephem.Saturn()]:
         body.compute(pos)
-        print("Including %s at (%s, %s)" % (body, math.degrees(float(repr(body.ra))), math.degrees(float(repr(body.dec)))))
         planets.append((body.ra/math.pi*180, body.dec/math.pi*180, body.mag))
     catalog = np.append(catalog, planets, axis=0)
     return catalog

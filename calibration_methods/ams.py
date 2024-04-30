@@ -4,7 +4,6 @@ import math
 import numpy as np
 import os
 import subprocess
-from astropy.coordinates import angular_separation
 from RMS.Astrometry.Conversions import datetime2JD
 
 class Calibration:
@@ -41,8 +40,6 @@ class Calibration:
             if iter > 0:
                 self.set_star_pairs(pairs)
         os.chdir("amscams/pipeline")
-        #out = open(os.devnull, 'wb')
-        print("Calibration iteration", iter)
         with open('ams.log', 'a') as out:
             subprocess.Popen(['python', 'Process.py', 'deep_init', '1'], stdout=out, stderr=out).wait()
         os.chdir("../..")
@@ -113,11 +110,8 @@ class Calibration:
                 ])
         with open(self.calparams_file, "w") as calparams:
             json.dump(self.calparams, calparams, indent=4)
-            print("WROTE NEW STAR PAIRS")
     
     def set_star_pairs(self, pairs):
-        new_cat_image_stars = []
-        short_bright_stars = []
         img_x = np.array([p["image_star"][0] for p in pairs])
         img_y = np.array([p["image_star"][1] for p in pairs])
         img_ra, img_dec = self.xy_to_ra_dec(img_x, img_y)
