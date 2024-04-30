@@ -28,8 +28,7 @@ def find_blobs(image):
     return [(p.pt[0], p.pt[1]) for p in detector.detect(image)]
 
 
-def detect(image_file, mask_file=None, star_list=[]):
-    image = cv2.imread(image_file, 0) 
+def detect(image, mask_file=None, star_list=[]):
     image_inv = cv2.bitwise_not(image)
 
     mask = None
@@ -54,11 +53,12 @@ def detect(image_file, mask_file=None, star_list=[]):
         try:
             min = part.min()
             max = part.max()
-            if max-min < 20:
-                print("Skipping blob at %s, %s because diff is %s" % (x, y, max-min))
+            if max-min < 14:
+                #print("Skipping blob at %s, %s because diff is %s" % (x, y, max-min))
                 continue
             else:
-                print("Including blob at %s, %s because diff is %s" % (x, y, max-min))
+                pass
+                #print("Including blob at %s, %s because diff is %s" % (x, y, max-min))
         except Exception as e:
             print("Error: %s" % e)
     
@@ -85,7 +85,7 @@ def detect(image_file, mask_file=None, star_list=[]):
         except Exception as e:
             print("Failed to find fit for star at [%s, %s]: %s" % (x, y, e))
 
-    gaussian_fit.plot_contours(params)
+    #gaussian_fit.plot_contours(params)
 
     return stars
 
