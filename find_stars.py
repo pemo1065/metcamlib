@@ -28,7 +28,7 @@ def find_blobs(image):
     return [(p.pt[0], p.pt[1]) for p in detector.detect(image)]
 
 
-def detect(image, mask_file=None, star_list=[]):
+def detect(image, mask_file=None, star_list=[], min_px_diff=14):
     image_inv = cv2.bitwise_not(image)
 
     mask = None
@@ -53,31 +53,17 @@ def detect(image, mask_file=None, star_list=[]):
         try:
             min = part.min()
             max = part.max()
-            if max-min < 14:
-                #print("Skipping blob at %s, %s because diff is %s" % (x, y, max-min))
+            if max-min < min_px_diff:
                 continue
-            else:
-                pass
-                #print("Including blob at %s, %s because diff is %s" % (x, y, max-min))
         except Exception as e:
             print("Error: %s" % e)
     
 
         try:
-            #min_pixel = part.min()
-            #part1 = part - min_pixel
-            #_, part1 = cv2.threshold(part1, 10, 255, cv2.THRESH_TOZERO)
-
             guess = find_max_px_coords(part)
 
             amp, x0, y0, sigma_x, sigma_y, theta = gaussian_fit.best_fit(part, guess)
             params.append((part, f'{(int(x) - padding + x0):.2f}, {(int(y) - padding + y0):.2f}', (amp, x0, y0, sigma_x, sigma_y, theta)))
-            #if abs(int(x) - padding + x1 - 1245) < 5 and abs(int(y) - padding + y1 - 765) < 5:
-            #    print("Found center at (%s, %s)" % (int(x) - padding + x1, int(y) - padding + y1))
-            #    print("Fit guess (%s, %s) to (%s, %s)" % (guess[0], guess[1], int(x) - padding + x1 - 1245, int(y) - padding + y1 - 765))
-            #    cv2.namedWindow("st_detail", cv2.WINDOW_NORMAL) 
-            #    cv2.imshow("st_detail", np.concatenate((part, part1), axis=1) )
-            #    cv2.waitKey(0)
 
             star = (int(x) - padding + x0, int(y) - padding + y0, point[2] if len(point) > 3 else 0, point[3] if len(point) > 3 else 0)
             stars.append(star)
@@ -87,7 +73,7 @@ def detect(image, mask_file=None, star_list=[]):
 
     #gaussian_fit.plot_contours(params)
 
-    return stars
+    return stars, params
 
 
 if __name__ == "__main__":

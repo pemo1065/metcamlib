@@ -8,9 +8,9 @@ from RMS.Formats import Platepar
 class Calibration:
     def __init__(self, image_file, calparams_file, timestamp):
         self.star_pairs = []
-        platepar_file = self.calparams_to_platepar(calparams_file, timestamp)
+        self.platepar_file = self.calparams_to_platepar(calparams_file, timestamp)
         self.platepar: Platepar = Platepar.Platepar()
-        self.platepar.read(platepar_file, "json")
+        self.platepar.read(self.platepar_file, "json")
         self.timestamp = timestamp
 
     
@@ -94,6 +94,13 @@ class Calibration:
             json.dump(platepar, pp)
         return platepar_file
 
+    def output_file(self):
+        return self.platepar_file
+
+    # Returns the suggested iterations, and the reduction in fitting distance with each iteration
+    def suggested_params(self):
+        return (5, 12, 2)
+
     def calibrate(self, c=[], i=[], iter=0):
         if len(self.star_pairs) > 0:
             c = np.array([(np.float64(p["catalog_star"][2]), np.float64(p["catalog_star"][3]), 0) for p in self.star_pairs])
@@ -106,6 +113,8 @@ class Calibration:
             self.platepar.distortion_type = "radial7-odd"
         self.platepar.fitAstrometry(self.platepar.JD, i, c, first_platepar_fit=True, fit_only_pointing=False, fixed_scale=False)
         self.platepar.fitAstrometry(self.platepar.JD, i, c, first_platepar_fit=False, fit_only_pointing=False, fixed_scale=False)
+        with open(self.platepar_file, "w") as pp_file:
+            pp_file.write(self.platepar.jsonStr())
         return True
 
     def get_pos(self):

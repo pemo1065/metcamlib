@@ -45,8 +45,6 @@ def plot_contours(params):
     x = np.linspace(0.5, im.shape[0]-0.5, im.shape[0])
     y = np.linspace(0.5, im.shape[1]-0.5, im.shape[1])
     x, y = np.meshgrid(x,y)
-    #print("linspace: %s" % x)
-    #exit()
     x0 -= 0.5
     y0 -= 0.5
     z = amp * np.e ** (-0.5 * (a*(x-[x0])**2 + 2*b*(x-[x0])*(y-[y0]) + c*(y-[y0])**2))
@@ -73,5 +71,5 @@ def plot_contours(params):
         ax.contour(x, y, z, levels=[0, 0.15*amp, 0.3*amp, 0.45*amp, 0.6*amp, 0.75*amp, 0.9*amp], colors="red")
 
     slider.on_changed(update)
-    plt.show() 
+    plt.show()
 

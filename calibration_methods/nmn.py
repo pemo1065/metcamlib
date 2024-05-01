@@ -14,6 +14,8 @@ class Calibration:
         self.first = True
         self.star_pairs = []
         self.timestamp = timestamp
+        dt = datetime.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+        self.lens_file = "output/%s" % dt.strftime("%Y_%m_%d_%H_%M_%S.pto")
         self.image_file = image_file
         with open(ams_file) as f:
             self.data = json.load(f)
@@ -30,7 +32,6 @@ class Calibration:
             self.pos.elevation = float(self.data["device_alt"])
             self.pos.temp = 10.0
 
-            dt = datetime.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
             self.pos.date = dt.strftime('%Y/%m/%d %H:%M:%S')
 
             if 'pixel_scale' in self.data:
@@ -40,7 +41,7 @@ class Calibration:
 
     
     def write_pto_file(self):
-        with open("lens.pto", 'w') as output:
+        with open(self.lens_file, 'w') as output:
             print('''# hugin project file
 #hugin_ptoversion 2
 p f2 w36000 h18000 v360  E0 R0 n"TIFF_m c:LZW"
@@ -117,16 +118,23 @@ v
     def set_star_pairs(self, pairs):
         self.star_pairs = pairs
 
+    def output_file(self):
+        return self.lens_file
+
+    # Returns the suggested iterations, and the reduction in fitting distance with each iteration
+    def suggested_params(self):
+        return (5, 12, 2)
+
     def calibrate(self, a=None, b=None, iter=None):
         self.write_pto_file()
         self.pano = hsi.Panorama()
-        self.pano.ReadPTOFile("lens.pto")
+        self.pano.ReadPTOFile(self.lens_file)
         self.pano.setOptimizeVector([('r', 'p', 'y', 'v', 'a', 'b', 'c', 'd', 'e'), ()])
-        self.pano.WritePTOFile("lens.pto")
+        self.pano.WritePTOFile(self.lens_file)
         with open("pano.log", "a") as out:
             #subprocess.Popen(['cpclean', '-n', '1', '-o', "lens.pto", "lens.pto"], stdout=out, stderr=out).wait()
-            subprocess.Popen(['autooptimiser', '-n', "lens.pto", '-o', "lens.pto"], stdout=out, stderr=out).wait()
-        self.pano.ReadPTOFile("lens.pto")
+            subprocess.Popen(['autooptimiser', '-n', self.lens_file, '-o', self.lens_file], stdout=out, stderr=out).wait()
+        self.pano.ReadPTOFile(self.lens_file)
 
         img = self.pano.getImage(0)
         self.tf = hsi.Transform()

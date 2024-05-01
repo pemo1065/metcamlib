@@ -30,6 +30,21 @@ class Calibration:
             }
             with open("ams/cal/freecal_index.json", "w") as freecal_idx_json:
                 json.dump(freecal_idx, freecal_idx_json, indent=4)
+        self.clean_old_files()
+
+    def clean_old_files(self):
+        try:
+            os.unlink("ams/cal/multi_poly-AMSXXX-1.info")
+        except:
+            pass
+        try:
+            os.unlink("ams.log")
+        except:
+            pass
+
+    # Returns the suggested iterations, and the reduction in fitting distance with each iteration
+    def suggested_params(self):
+        return (4, 15, 0)
 
     def calibrate(self, c=[], i=[], iter=0):
         if len(c) > 0 and len(i) > 0:
@@ -53,6 +68,9 @@ class Calibration:
         self.calparams["dec_center"] = self.multi_poly["dec_center"]
         self.calparams["position_angle"] = self.multi_poly["position_angle"]
         return True
+
+    def output_file(self):
+        return self.calparams_file
 
     def get_pos(self):
         return float(self.calparams["device_lat"]), float(self.calparams["device_lng"]), float(self.calparams["device_alt"]), self.timestamp
