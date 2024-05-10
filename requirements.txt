@@ -5,3 +5,15 @@ astropy
 matplotlib
 imutils
 rich
+Wand
+ephem
+Cython
+requests
+simplejson
+scikit-learn
+scikit-image
+suntime
+pytz
+redis
+boto3
+sympy

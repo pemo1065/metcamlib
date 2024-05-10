@@ -11,6 +11,10 @@ from matplotlib import pyplot
 from gaussian_fit import plot_contours
 from rich.console import Console
 from rich.table import Table
+from wand.image import Image
+from wand.drawing import Drawing
+from wand.color import Color
+
 
 def residual_pixels(x1, y1, x2, y2):
     return math.sqrt((x1-x2)**2 + (y1-y2)**2)
@@ -38,6 +42,9 @@ def pair_stars(catalog_stars, image_stars, max_dist_px=10):
                 min_dist = dist
                 best_match = cs
         if min_dist <= max_dist_px:
+            ang_sep = degrees(angular_separation(radians(best_match[2]), radians(best_match[3]), radians(ims[2]), radians(ims[3])))
+            if ang_sep > 1:
+                continue
             #dists = sorted(dists)
             #if dists[1]/dists[0] < 1.5:
             #    print("Ambiguous pairing for star at (%s, %s). Found two close matches with dists %s and %s. Skipping" % (ims[0], ims[1], dists[0], dists[1]))
@@ -48,7 +55,7 @@ def pair_stars(catalog_stars, image_stars, max_dist_px=10):
                 "residual_px": min_dist,
                 "residual_x": best_match[0] - ims[0],
                 "residual_y": best_match[1] - ims[1],
-                "residual_angle": degrees(angular_separation(radians(best_match[2]), radians(best_match[3]), radians(ims[2]), radians(ims[3]))) #degrees(residual_angle(radians(best_match[2]), radians(ims[2]), radians(best_match[3]), radians(ims[3])))
+                "residual_angle": ang_sep #degrees(residual_angle(radians(best_match[2]), radians(ims[2]), radians(best_match[3]), radians(ims[3])))
             })
         else:
             print("Found no match for image star at coordinates (%s, %s). Min dist: %s" % (ims[0], ims[1], min_dist))
@@ -58,13 +65,17 @@ def pair_stars(catalog_stars, image_stars, max_dist_px=10):
 def res_table(pairs):
     console = Console()
     table = Table(show_header=True, header_style="bold magenta")
-    table.add_column("Star (x,y)", justify="right")
-    table.add_column("Star (ra,dec)", justify="right")
+    table.add_column("Image star (x,y)", justify="right")
+    table.add_column("Image star (ra,dec)", justify="right")
+    table.add_column("Catalog star (x,y)", justify="right")
+    table.add_column("Catalog star (ra,dec)", justify="right")
     table.add_column("Pixel distance", justify="right")
     table.add_column("Angular distance (arcmin)", justify="right")
     for pair in pairs:
         table.add_row(
             "(%s, %s)" % (format(pair["image_star"][0], ".2f"), format(pair["image_star"][1], ".2f")),
+            "(%s, %s)" % (format(pair["image_star"][2], ".2f"), format(pair["image_star"][3], ".2f")),
+            "(%s, %s)" % (format(pair["catalog_star"][0], ".2f"), format(pair["catalog_star"][1], ".2f")),
             "(%s, %s)" % (format(pair["catalog_star"][2], ".2f"), format(pair["catalog_star"][3], ".2f")),
             str(format(pair["residual_px"], ".2f")),
             str(format(60*pair["residual_angle"], ".2f")),
@@ -72,13 +83,16 @@ def res_table(pairs):
     console.print(table)
 
 def plot_residuals(pairs, im_h, im_w):
-    fig, ((ax1), (ax2)) = pyplot.subplots(2, 1, num="Residuals")
+    fig, ((ax1, ax2), (ax3, ax4)) = pyplot.subplots(2, 2, num="Residuals")
+    fig.delaxes(ax4)
     fig.set_figwidth(10)
     fig.set_figheight(8)
     ax1.set_xlabel("Radius")
     ax1.set_ylabel("Residual (deg)")
     ax2.set_xlabel("X residual (px)")
     ax2.set_ylabel("Y residual (px)")
+    ax3.set_xlabel("Pixel residual")
+    ax3.set_ylabel("Angle residual")
     center = (im_h/2+0.5, im_w/2+0.5)
     residual_angles = []
     radii = []
@@ -99,6 +113,7 @@ def plot_residuals(pairs, im_h, im_w):
     ax1.scatter(radii, residual_angles)
     ax2.scatter(res_x, res_y)
     ax2.scatter([px_avg[0]], [px_avg[1]], c="r", marker="x")
+    ax3.scatter([p["residual_px"] for p in pairs], [p["residual_angle"] for p in pairs])
     fig.show()
 
 def get_normalized_vector(x1, y1, x2, y2):
@@ -152,13 +167,26 @@ def show_residuals(image, pairs, catalog_stars, image_stars, mask_file="mask.png
 
     paired_img_stars_x = [p["image_star"][0]-0.5 for p in pairs]
     paired_img_stars_y = [p["image_star"][1]-0.5 for p in pairs]
-    paired_cat_stars_x = [cs[0]-0.5 for cs in catalog_stars if mask is None or mask[min(1079, max(0, int(cs[1])))][min(1919, max(0, int(cs[0])))] != 0]
-    paired_cat_stars_y = [cs[1]-0.5 for cs in catalog_stars if mask is None or mask[min(1079, max(0, int(cs[1])))][min(1919, max(0, int(cs[0])))] != 0]
+    cat_stars_x = [cs[0]-0.5 for cs in catalog_stars if mask is None or mask[min(1079, max(0, int(cs[1])))][min(1919, max(0, int(cs[0])))] != 0]
+    cat_stars_y = [cs[1]-0.5 for cs in catalog_stars if mask is None or mask[min(1079, max(0, int(cs[1])))][min(1919, max(0, int(cs[0])))] != 0]
     pyplot.scatter(paired_img_stars_x, paired_img_stars_y, c='magenta', marker='x', linewidths=1)
-    pyplot.scatter(paired_cat_stars_x, paired_cat_stars_y, c='b', marker='+', linewidths=1)
+    pyplot.scatter(cat_stars_x, cat_stars_y, c='b', marker='+', linewidths=1)
     pyplot.scatter(img_stars_x, img_stars_y, c='r', marker='.', linewidths=1)
 
     pyplot.show()
+
+def print_roundtrips(calib):
+    xs = []
+    ys = []
+    for x in range(0, 1921, 120):
+        for y in range(0, 1081, 120):
+            xs.append(x)
+            ys.append(y)
+    ras, decs = calib.xy_to_ra_dec(xs, ys)
+
+    x2, y2 = calib.ra_dec_to_xy(ras, decs)
+    for i, _ in enumerate(xs):
+        print("(%s, %s) maps to %s/%s, and back to (%s, %s)" % (xs[i], ys[i], ras[i], decs[i], x2[i], y2[i]))
 
 def find_closest_cat_match(star_list, cat_stars):
     for i in range(len(star_list)):
@@ -180,29 +208,66 @@ def open_image(image_file):
     im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
     return im
 
+def plot_stars(image_file, pairs):
+    pic = Image(filename=image_file)
+    stars = pic.clone()
+
+    with Drawing() as draw:
+        draw.fill_color = Color('white')
+        draw.fill_opacity=0.0
+        draw.stroke_color = Color('white')
+        for pair in pairs:
+            img_star = pair["image_star"]
+            cat_star = pair["catalog_star"]
+            x_step, y_step = get_normalized_vector(img_star[0], img_star[1], cat_star[0], cat_star[1])
+            x, y = cat_star[0], cat_star[1]
+            ix, iy = img_star[0], img_star[1]
+            draw.circle((x, y), (x+10, y))
+            draw.line((x + 11*x_step, y + 11*y_step), (x + x_step*11 + pair["residual_px"]*11*x_step, y+ y_step*11 + pair["residual_px"]*11*y_step))
+            # Crosshair
+            draw.line((x+6, y), (x+9, y))
+            draw.line((x-9, y), (x-6, y))
+            draw.line((x, y+6), (x, y+9))
+            draw.line((x, y-9), (x, y-6))
+
+            draw.push()
+            draw.stroke_color = Color('red')
+            draw.fill_color = Color('red')
+            draw.circle((ix, iy), (ix+1, iy))
+            draw.pop()
+        draw(stars)
+        stars.save(filename='out.png')
+
 def calib_iteration(image, catalog, calib, mask_file="mask.png"):
     (max_iter, initial_max_dist, max_dist_reduction) = calib.suggested_params()
+    #max_iter = 3
+    print("ITERS: %s" % max_iter)
     star_list = calib.get_star_list()
     image_stars, _ = find_stars.detect(image, mask_file, star_list)
-    calib.calibrate(np.array([(np.float64(ims[2]), np.float64(ims[3]), 0) for ims in image_stars]), np.array([(np.float64(ims[0]), np.float64(ims[1]), 0) for ims in image_stars]))
+    print("Image stars: %s" % image_stars)
+    print("Running first calibraton with %s stars" % len(image_stars))
+    calib.calibrate(np.array([(np.float64(ims[2]), np.float64(ims[3]), 0) for ims in image_stars]), np.array([(np.float64(ims[0]), np.float64(ims[1]), 0) for ims in image_stars]), curr_rms=100)
 
     cra = np.array([cs[0] for cs in catalog])
     cdec = np.array([cs[1] for cs in catalog])
     x, y = calib.ra_dec_to_xy(cra, cdec)
     catalog_stars = list(zip(x, y, cra, cdec))
-    catalog_stars = [(s[0], s[1], s[2], s[3]) for s in catalog_stars if s[0] >= -10 and s[0] <= 1930 and s[1] >= -10 and s[1] <= 1090]
+    catalog_stars = [(s[0], s[1], s[2], s[3]) for s in catalog_stars if s[0] >= 0 and s[0] <= 1920 and s[1] >= 0 and s[1] <= 1080]
+    pairs = pair_stars(catalog_stars, image_stars)
+    #return pairs, catalog_stars, image_stars, []
     image_stars, gaussian_params = find_stars.detect(image, mask_file)
     
     max_dist = initial_max_dist
     last_rms_res = 1000
     i = 1
     print("Cat length: %s" % len(catalog))
+    keep_going = True
     while True:
         cra = np.array([cs[0] for cs in catalog])
         cdec = np.array([cs[1] for cs in catalog])
         x, y = calib.ra_dec_to_xy(cra, cdec)
         catalog_stars = list(zip(x, y, cra, cdec))
-        catalog_stars = [(s[0], s[1], s[2], s[3]) for s in catalog_stars if s[0] >= -10 and s[0] <= 1930 and s[1] >= -10 and s[1] <= 1090]
+        catalog_stars = [(s[0], s[1], s[2], s[3]) for s in catalog_stars if s[0] >= 0 and s[0] < 1920 and s[1] >= 0 and s[1] < 1080]
 
         ix = [ims[0] for ims in image_stars]
         iy = [ims[1] for ims in image_stars]
@@ -211,21 +276,23 @@ def calib_iteration(image, catalog, calib, mask_file="mask.png"):
         image_stars = list(zip(ix, iy, ra_data, dec_data))
         pairs = pair_stars(catalog_stars, image_stars, max_dist_px=max_dist)
 
-        if i == max_iter:
+        if i == max_iter or not keep_going:
             return pairs, catalog_stars, image_stars, gaussian_params
 
         calib.set_star_pairs(pairs)
 
         rms_res = get_rms(pairs)
         print("RMS residual after iteration %s: %s arcmin" % (i, rms_res))
-        if abs(rms_res - last_rms_res) < 0.005:
-            print("No RMS residual change last iteration. Skipping further iterations.")
+        if i == 6:
             return pairs, catalog_stars, image_stars, gaussian_params
+        #if abs(rms_res - last_rms_res) < 0.005 and i > 3:
+        #    print("No RMS residual change last iteration. Skipping further iterations.")
+        #    return pairs, catalog_stars, image_stars, gaussian_params
+
+        print("Running iteration %s with %s star pairs" % (i+1, len(pairs)))
+        keep_going = calib.calibrate(iter=i, curr_rms=rms_res, last_rms=last_rms_res)
+
         last_rms_res = rms_res
-
-        print("Calibrating with %s star pairs" % len(pairs))
-        calib.calibrate(iter=i)
-
         i += 1
         # With each iteration we want to be more discriminate with how close a pair has to be to be counted
         max_dist -= max_dist_reduction
@@ -242,16 +309,23 @@ def get_rms(pairs):
 def calc_residuals(image_file, catalog, calib, mask_file="mask.png"):
     image = open_image(image_file)
     pairs, catalog_stars, image_stars, gaussian_params = calib_iteration(image, catalog, calib, mask_file)
+    #print_roundtrips(calib)
 
-    plot_contours(gaussian_params)
-    print("\n== Residual RMS: %s arcmin" % get_rms(pairs))
+    plot_stars(image_file, pairs)
+
+    rms_res = get_rms(pairs)
+    if rms_res < 8:
+        calib.write_initial_calib_file(pairs)
+        print("Wrote initial calib file")
+    print("\n== Residual RMS: %s arcmin" % rms_res)
     plot_residuals(pairs, 1920, 1080)
     show_residuals(image, pairs, catalog_stars, image_stars, mask_file)
 
     print("\nOutput written to %s" % calib.output_file())
 
-def read_star_catalog(catalog_file, pos):
-    catalog, _, _ = StarCatalog.readStarCatalog(".", catalog_file, lim_mag=4.8)
+def read_star_catalog(catalog_file, pos, lim_mag=5.0):
+    print("Detecting stars with limit magnitude %s" % lim_mag)
+    catalog, _, _ = StarCatalog.readStarCatalog(".", catalog_file, lim_mag=lim_mag)
     planets = []
     for body in [ephem.Mercury(), ephem.Venus(), ephem.Mars(), ephem.Jupiter(), ephem.Saturn()]:
         body.compute(pos)

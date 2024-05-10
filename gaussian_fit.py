@@ -27,7 +27,7 @@ def best_fit(im, guess):
     y = np.linspace(0.5, h-0.5, h)
     x, y = np.meshgrid(x, y)
 
-    initial_guess = (im.max(), guess[0], guess[1], 2, 2, 0, im.min())
+    initial_guess = (im.max()-im.min(), guess[0], guess[1], 2, 2, 0, im.min())
     bounds = ([0, 0, 0, 0, 0, 0, 0], [255, w, h, w/2, h/2, 360, 255])
 
     popt, _ = opt.curve_fit(gaussian_2d, (x, y), data, p0=initial_guess, bounds=bounds) 

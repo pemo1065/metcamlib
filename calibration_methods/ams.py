@@ -46,7 +46,7 @@ class Calibration:
     def suggested_params(self):
         return (4, 15, 0)
 
-    def calibrate(self, c=[], i=[], iter=0):
+    def calibrate(self, c=[], i=[], iter=0, curr_rms=None, last_rms=None):
         if len(c) > 0 and len(i) > 0:
             pairs = [{
                 "image_star": (i[idx][0], i[idx][1]),
@@ -75,14 +75,13 @@ class Calibration:
     def get_pos(self):
         return float(self.calparams["device_lat"]), float(self.calparams["device_lng"]), float(self.calparams["device_alt"]), self.timestamp
 
+    def write_initial_calib_file(self, pairs):
+        pass
+
     def add_additional_stars(self, pairs):
-        if self.calparams["short_bright_stars"] == None:
+        if "short_bright_stars" not in self.calparams:
             self.calparams["short_bright_stars"] = []
         for pair in pairs:
-            #for star in self.calparams["cat_image_stars"]:
-            #    name, mag, ra, dec, img_ra, img_dec, match_dist, new_x, new_y, img_az, img_el, new_cat_x, new_cat_y, imx, imy, real_res_px, star_flux = star
-            #    if abs(ra -pair["catalog_star"][2]) < 0.05 and abs(dec - pair["catalog_star"][3]) < 0.05:
-            #print("Adjusting (%s, %s) to (%s, %s)" % (imx, imy, pair["image_star"][0], pair["image_star"][1]))
             found = False
             for s in self.calparams["cat_image_stars"]:
                 px = pair["image_star"][0]
@@ -110,7 +109,6 @@ class Calibration:
                     0.0,
                     0.0,
                 ])
-                #name, name, ra, dec, mag, new_cat_x, new_cat_y, zp_cat_x, zp_cat_y, rx1,ry1,rx2,ry2
                 self.calparams["short_bright_stars"].append([
                     "",
                     "",
@@ -152,7 +150,11 @@ class Calibration:
     def ra_dec_to_xy(self, ra, dec):
         xs = []
         ys = []
-        for r, d in zip(ra.tolist(), dec.tolist()):
+        if not isinstance(ra, list):
+            ra = ra.tolist()
+        if not isinstance(dec, list):
+            dec = dec.tolist()
+        for r, d in zip(ra, dec):
             x, y = distort_xy(r, d, self.multi_poly["ra_center"], self.multi_poly["dec_center"],
                     self.multi_poly["x_poly"], self.multi_poly["y_poly"], self.multi_poly["imagew"],
                     self.multi_poly["imageh"], self.multi_poly["position_angle"],

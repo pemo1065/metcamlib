@@ -132,9 +132,9 @@
         }
     },
     "site": {
-        "device_lat": "59.85",
-        "device_lng": "17.64",
-        "device_alt": "30",
+        "device_lat": "59.83768325430412",
+        "device_lng": "17.64770674806502",
+        "device_alt": "20",
         "operator_name": "Elizabeth Warner",
         "mac_addr": "00:0e:c4:d3:e1:15",
         "multi_station_sync": [

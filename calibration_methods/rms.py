@@ -20,6 +20,7 @@ class Calibration:
         dt = datetime.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
         timestamp = Time(dt.strftime('%Y-%m-%dT%H:%M:%S.000Z'), format="isot", scale="utc")
         star_list = [[timestamp.jd, s[13], s[14], 10000.0, s[2], s[3], s[1]] for s in calparams["cat_image_stars"]]
+        print("Star list: %s, cat image stars: %s" % (len(star_list), len(calparams["cat_image_stars"])))
         platepar = {
             "F_scale": 1920.0/float(calparams["fieldw"]),
             "Ho": 0,
@@ -59,12 +60,12 @@ class Calibration:
                 8,
                 9
             ],
-            "x_poly": calparams["x_poly"],
-            "y_poly": calparams["y_poly"],
-            "x_poly_fwd": calparams["x_poly_fwd"],
-            "y_poly_fwd": calparams["y_poly_fwd"],
-            "x_poly_rev": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            "y_poly_rev": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "x_poly": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], #calparams["x_poly"],
+            "y_poly": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],#calparams["y_poly"],
+            "x_poly_fwd": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],#calparams["x_poly_fwd"],
+            "y_poly_fwd": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],#calparams["y_poly_fwd"],
+            "x_poly_rev": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],#, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "y_poly_rev": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],#, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             "star_list": star_list,
             "elev": calparams["device_alt"],
             "equal_aspect": False,
@@ -82,7 +83,6 @@ class Calibration:
             "poly_length": 14,
             "pos_angle_ref": calparams["orig_pos_ang"],
             "refraction": True,
-            #"rotation_from_horiz": -1.4170180941768553,
             "station_code": "XX0001",
             "version": 2,
             "vignetting_coeff": 0.001,
@@ -94,23 +94,48 @@ class Calibration:
             json.dump(platepar, pp)
         return platepar_file
 
+    def write_initial_calib_file(self, pairs):
+        pass
+
     def output_file(self):
         return self.platepar_file
 
     # Returns the suggested iterations, and the reduction in fitting distance with each iteration
     def suggested_params(self):
-        return (5, 12, 2)
+        return (7, 8, 0)
 
-    def calibrate(self, c=[], i=[], iter=0):
+    def set_distortion_type(self, iter, last_rms, curr_rms):
+        if last_rms is None:
+            self.platepar.distortion_type = "radial3-odd"
+            return
+        rms_improved = last_rms - curr_rms > 0.05
+        dist_type = self.platepar.distortion_type
+        #print("Current dist_type: %s" % dist_type)
+        if rms_improved:
+            return
+        else:
+            if dist_type == "radial3-odd":
+                self.platepar.distortion_type = "radial5-odd"
+            else:
+                self.platepar.distortion_type = "radial7-odd"
+
+    def calibrate(self, c=[], i=[], iter=0, curr_rms=None, last_rms=None):
+        print("LAST: %s, CURR: %s" % (last_rms, curr_rms))
+        rms_changed = last_rms is None or abs(last_rms - curr_rms) > 0.05
         if len(self.star_pairs) > 0:
             c = np.array([(np.float64(p["catalog_star"][2]), np.float64(p["catalog_star"][3]), 0) for p in self.star_pairs])
             i = np.array([(np.float64(p["image_star"][0]), np.float64(p["image_star"][1]), 0) for p in self.star_pairs])
-        if iter < 1:
-            self.platepar.distortion_type = "radial3-odd"
-        elif iter < 2:
-            self.platepar.distortion_type = "radial5-odd"
-        else:
-            self.platepar.distortion_type = "radial7-odd"
+        #if iter < 3 or curr_rms >= 10 and rms_changed:
+        #    self.platepar.distortion_type = "radial3-odd"
+        #elif iter < 4 or curr_rms >= 5 and (self.platepar.distortion_type != "radial5-odd" and rms_changed ):
+        #    self.platepar.distortion_type = "radial5-odd"
+        #else:
+        #    self.platepar.distortion_type = "radial7-odd"
+        if iter == 4:
+            print("Catalog: %s" % c.tolist())
+            print("Image: %s" % i.tolist())
+        self.set_distortion_type(iter, last_rms, curr_rms)
+        print("Using dist type %s" % self.platepar.distortion_type)
         self.platepar.fitAstrometry(self.platepar.JD, i, c, first_platepar_fit=True, fit_only_pointing=False, fixed_scale=False)
         self.platepar.fitAstrometry(self.platepar.JD, i, c, first_platepar_fit=False, fit_only_pointing=False, fixed_scale=False)
         with open(self.platepar_file, "w") as pp_file:

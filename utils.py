@@ -10,6 +10,7 @@ def ra_dec_to_alt_az(ra, dec, lat, lon, elev, timestamp):
 
     skycoord = SkyCoord(ra * u.degree, dec * u.degree)
     altaz = skycoord.transform_to(aa)
+
     return altaz.alt.value, altaz.az.value
     
 def alt_az_to_ra_dec(alt, az, lat, lon, elev, timestamp):

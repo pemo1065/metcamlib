@@ -1,8 +1,11 @@
 import cv2 
+import math
 import numpy as np 
 import gaussian_fit
 
 padding = 6
+
+MAX_STARS=100
 
 def find_max_px_coords(im, initial_guess=(padding, padding)):
     h, w = im.shape[:2]
@@ -18,15 +21,15 @@ def find_blobs(image):
     params = cv2.SimpleBlobDetector_Params()
 
     params.filterByArea = True
-    params.maxArea = 60
-    params.minArea = 8
+    params.maxArea = 80
+    params.minArea = 6
     params.minThreshold = 5
     params.thresholdStep = 5
+    params.minRepeatability = 1
 
     detector = cv2.SimpleBlobDetector_create(params)
 
     return [(p.pt[0], p.pt[1]) for p in detector.detect(image)]
-
 
 def detect(image, mask_file=None, star_list=[], min_px_diff=14):
     image_inv = cv2.bitwise_not(image)
@@ -41,8 +44,7 @@ def detect(image, mask_file=None, star_list=[], min_px_diff=14):
         star_list = find_blobs(image_inv)
         use_mask = True
 
-    stars = []
-    params = []
+    results = []
     # Remove points that are masked out and find gaussian fits for remaining points
     for point in star_list:
         x, y = point[0], point[1]
@@ -53,6 +55,7 @@ def detect(image, mask_file=None, star_list=[], min_px_diff=14):
         try:
             min = part.min()
             max = part.max()
+            # Filter out detections that are fainter than the threshold value
             if max-min < min_px_diff:
                 continue
         except Exception as e:
@@ -63,13 +66,32 @@ def detect(image, mask_file=None, star_list=[], min_px_diff=14):
             guess = find_max_px_coords(part)
 
             amp, x0, y0, sigma_x, sigma_y, theta = gaussian_fit.best_fit(part, guess)
-            params.append((part, f'{(int(x) - padding + x0):.2f}, {(int(y) - padding + y0):.2f}', (amp, x0, y0, sigma_x, sigma_y, theta)))
 
-            star = (int(x) - padding + x0, int(y) - padding + y0, point[2] if len(point) > 3 else 0, point[3] if len(point) > 3 else 0)
-            stars.append(star)
-
+            x, y = int(x) - padding + x0, int(y) - padding + y0
+            duplicate = False
+            for s in results:
+                if math.sqrt((x - s[0][0])**2 + (y - s[0][1])**2) < 10:
+                    print("DUPLICATE! Skipping star at point %s, %s" % (x, y))
+                    duplicate = True
+                    break
+            if duplicate:
+                continue
+            star = (x, y, point[2] if len(point) > 3 else 0, point[3] if len(point) > 3 else 0)
+            params = (part, f'{x:.2f}, {y:.2f}', (amp, x0, y0, sigma_x, sigma_y, theta))
+            results.append((star, params))
         except Exception as e:
             print("Failed to find fit for star at [%s, %s]: %s" % (x, y, e))
+    stars = []
+    params = []
+
+    if len(results) > MAX_STARS:
+        # Sort detections by amplitude and filter out the brightest stars
+        results.sort(key=lambda r: r[1][2][0], reverse=True)
+        results = results[:MAX_STARS]
+        print("Returning %s stars" % len(results))
+
+    stars = [r[0] for r in results]
+    params = [r[1] for r in results]
 
     #gaussian_fit.plot_contours(params)
 

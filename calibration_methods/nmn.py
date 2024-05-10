@@ -4,8 +4,9 @@ import hsi
 import json
 import math
 import subprocess
+from astropy.coordinates import angular_separation
 from calibration_methods.stars import cat
-from utils import ra_dec_to_alt_az
+from utils import ra_dec_to_alt_az, alt_az_to_ra_dec
 
 MAX_MATCH_DIST=10
 
@@ -38,6 +39,73 @@ class Calibration:
                 self.pixel_scale = float(self.data['pixel_scale'])
             else:
                 self.pixel_scale = float(self.data['pixscale'])
+
+    def write_initial_calib_file(self, pairs):
+        alt_c, az_c = self.xy_to_alt_az(self.width/2.0 - 0.5, self.height/2.0 - 0.5)
+        alt_l, az_l = self.xy_to_alt_az(0, self.height/2.0 - 0.5)
+        alt_r, az_r = self.xy_to_alt_az(self.width-0.5, self.height/2.0 - 0.5)
+        alt_t, az_t = self.xy_to_alt_az(self.width/2.0, 0)
+        alt_b, az_b = self.xy_to_alt_az(self.width/2.0, self.height - 0.5)
+        print("Az/alt (l): %s/%s, Az/alt (r): %s%s" % (az_l, alt_l, az_r, alt_r))
+        fov = math.degrees(angular_separation(math.radians(alt_l), math.radians(az_l), math.radians(alt_r), math.radians(az_r)))
+        vfov = math.degrees(angular_separation(math.radians(alt_t), math.radians(az_t), math.radians(alt_b), math.radians(az_b)))
+        print("FOV: %s" % fov)
+        print("VFOV: %s" % vfov)
+        ra, dec = alt_az_to_ra_dec(alt_c, az_c, self.pos.lat, self.pos.lon, self.pos.elev, self.timestamp)
+        calparams = {
+            "imagew": self.width,
+            "imageh": self.height,
+            "device_lat": math.degrees(self.pos.lat),
+            "device_lng": math.degrees(self.pos.lon),
+            "device_alt": self.pos.elevation,
+            "center_az": az_c,
+            "center_el": alt_c,
+            "dec_center": dec,
+            "ra_center": ra,
+            "pixel_scale": self.pixel_scale,
+            "fieldw": fov,
+            "fieldh": vfov,
+            "cat_image_stars": [],
+            "short_bright_stars": [],
+            "orig_pos_ang": self.data["position_angle"],
+        }
+        for pair in pairs:
+            calparams["cat_image_stars"].append([
+                "",
+                1.0,
+                pair["catalog_star"][2],
+                pair["catalog_star"][3],
+                pair["image_star"][2],
+                pair["image_star"][3],
+                0.0,
+                pair["image_star"][0],
+                pair["image_star"][1],
+                0.0,
+                0.0,
+                pair["catalog_star"][0],
+                pair["catalog_star"][1],
+                pair["image_star"][0],
+                pair["image_star"][1],
+                0.0,
+                0.0,
+            ])
+            calparams["short_bright_stars"].append([
+                "",
+                "",
+                pair["catalog_star"][2],
+                pair["catalog_star"][3],
+                1.0,
+                pair["catalog_star"][0],
+                pair["catalog_star"][1],
+                pair["catalog_star"][0],
+                pair["catalog_star"][1],
+                pair["catalog_star"][0] - 20,
+                pair["catalog_star"][1] - 20,
+                pair["catalog_star"][0] + 20,
+                pair["catalog_star"][1] + 20,
+            ])
+        with open("output/calparams.json", "w") as cp:
+            json.dump(calparams, cp)
 
     
     def write_pto_file(self):
@@ -123,9 +191,9 @@ v
 
     # Returns the suggested iterations, and the reduction in fitting distance with each iteration
     def suggested_params(self):
-        return (5, 12, 2)
+        return (5, 14, 2)
 
-    def calibrate(self, a=None, b=None, iter=None):
+    def calibrate(self, a=None, b=None, iter=None, curr_rms=None, last_rms=None):
         self.write_pto_file()
         self.pano = hsi.Panorama()
         self.pano.ReadPTOFile(self.lens_file)
@@ -146,12 +214,25 @@ v
     def get_star_list(self):
         return [(s["image_star"][0], s["image_star"][1]) for s in self.star_pairs]
 
+    def xy_to_alt_az(self, x, y):
+        dst = hsi.FDiff2D()
+        self.itf.transformImgCoord(dst, hsi.FDiff2D(x, y))
+        alt = 90 - dst.y/100
+        az = (dst.x/100)%360
+        return alt, az
+
+    def alt_az_to_xy(self, alt, az):
+        scale = int(self.pano.getOptions().getWidth() / self.pano.getOptions().getHFOV())
+        dst = hsi.FDiff2D()
+        self.tf.transformImgCoord(dst, hsi.FDiff2D(float(az*scale), float((90-alt)*scale)))
+        return dst.x, dst.y
+
     def ra_dec_to_xy(self, ra, dec):
         scale = int(self.pano.getOptions().getWidth() / self.pano.getOptions().getHFOV())
         xs = []
         ys = []
         for r, d in zip(ra, dec): 
-            alt, az = ra_dec_to_alt_az(r, d, self.pos.lat, self.pos.lon, self.pos.elev, self.timestamp)
+            alt, az = ra_dec_to_alt_az(r, d, self.pos.lat, self.pos.lon, self.pos.elevation, self.timestamp)
             dst = hsi.FDiff2D()
             self.tf.transformImgCoord(dst, hsi.FDiff2D(float(az*scale), float((90-alt)*scale)))
             xs.append(dst.x)
@@ -165,7 +246,9 @@ v
         for x, y in zip(xs, ys):
             dst = hsi.FDiff2D()
             self.itf.transformImgCoord(dst, hsi.FDiff2D(x, y))
-            ra, dec = self.pos.radec_of(str((dst.x / 100) % 360), str(90 - (dst.y / 100)))
-            ras.append(ra/math.pi*180)
-            decs.append(dec/math.pi*180)
+            alt = 90 - dst.y/100
+            az = (dst.x/100)%360
+            ra, dec = alt_az_to_ra_dec(alt, az, self.pos.lat, self.pos.lon, self.pos.elevation, self.timestamp)
+            ras.append(ra)
+            decs.append(dec)
         return ras, decs

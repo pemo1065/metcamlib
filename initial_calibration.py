@@ -40,20 +40,20 @@ def initial_calibration(input_path):
   print("Initial calibration done.")
   os.chdir("../..")
 
-def calibrate(image_file, mask_file, timestamp, calibration_method):
+def calibrate(image_file, mask_file, timestamp, calibration_method, calib_file=None, lim_mag=5.0):
   dt = datetime.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
   base_filename = dt.strftime('%Y_%m_%d_%H_%M_%S_000_1')
   input_path = copy_file(image_file, base_filename)
-  initial_calibration(input_path)
-
-  calib_file = "ams/cal/freecal/%s/%s-stacked-calparams.json" % (base_filename, base_filename)
+  if calib_file is None:
+    initial_calibration(input_path)
+    calib_file = "ams/cal/freecal/%s/%s-stacked-calparams.json" % (base_filename, base_filename)
 
   calibration_method = importlib.import_module("calibration_methods.%s" % calibration_method)
   calib = calibration_method.Calibration(input_path, calib_file, timestamp)
 
   lat, lon, elev, timestamp = calib.get_pos()
   pos = get_observer(lat, lon, elev, timestamp)
-  catalog = read_star_catalog("BSC5.cat", pos)
+  catalog = read_star_catalog("BSC5.cat", pos, lim_mag=lim_mag)
 
   print("Performing main calibration.")
   calc_residuals(input_path, catalog, calib, mask_file)
@@ -66,6 +66,8 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--mask', dest='mask', help='Mask image', type=str, required=False)
     parser.add_argument('-t', '--timestamp', dest='timestamp', help='UTC timestamp of capture in format "YYYY-MM-DD hh:mm:ss"', type=str, required=True)
     parser.add_argument('-c', '--calibration-method', dest='calibration_method', help='Calibration method to use', type=str, required=True)
+    parser.add_argument('-l', '--lim-mag', dest='lim_mag', help='Magnitude limit for catalog stars', type=float, default=5.0, required=False)
+    parser.add_argument('-f', '--initial-calib-file', dest='calib_file', help='Initial calparams file from AMS', type=str, default=None, required=False)
 
     args = parser.parse_args()
-    calibrate(args.image, args.mask, args.timestamp, args.calibration_method)
+    calibrate(args.image, args.mask, args.timestamp, args.calibration_method, args.calib_file, args.lim_mag)
