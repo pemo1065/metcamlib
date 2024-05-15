@@ -1,21 +1,27 @@
-from astropy import units as u
-from astropy.coordinates import AltAz
-from astropy.coordinates import EarthLocation, SkyCoord
-from astropy.time import Time
+from math import degrees
+import ephem
 
 def ra_dec_to_alt_az(ra, dec, lat, lon, elev, timestamp):
-    observing_location = EarthLocation(lat=str(lat), lon=str(lon), height=elev*u.m)  
-    observing_time = Time(timestamp, scale="utc")  
-    aa = AltAz(location=observing_location, obstime=observing_time)
+    home = ephem.Observer()
 
-    skycoord = SkyCoord(ra * u.degree, dec * u.degree)
-    altaz = skycoord.transform_to(aa)
+    home.lon = str(lon)
+    home.lat = str(lat)
+    home.elevation = elev
+    home.date = timestamp
+    body = ephem.FixedBody()
+    body._epoch = ephem.J2000
+    body._ra = ephem.degrees(str(ra))
+    body._dec = ephem.degrees(str(dec))
+    body.compute(home)
+    return degrees(body.alt), degrees(body.az)
 
-    return altaz.alt.value, altaz.az.value
-    
+
 def alt_az_to_ra_dec(alt, az, lat, lon, elev, timestamp):
-    observing_location = EarthLocation(lat=str(lat), lon=str(lon), height=elev*u.m)  
-    observing_time = Time(timestamp, scale="utc")  
-    altaz = SkyCoord(alt = alt*u.degree, az = az*u.deg, obstime = observing_time, frame = 'altaz', location = observing_location)
-    icrs = altaz.icrs
-    return icrs.ra.value, icrs.dec.value
+    home = ephem.Observer()
+
+    home.lon = str(lon)
+    home.lat = str(lat)
+    home.elevation = elev
+    home.date = timestamp
+    ra, dec = home.radec_of(az=str(az), alt=str(alt))
+    return degrees(ra), degrees(dec)

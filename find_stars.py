@@ -5,7 +5,7 @@ import gaussian_fit
 
 padding = 6
 
-MAX_STARS=100
+MAX_STARS_DEFAULT=100
 
 def find_max_px_coords(im, initial_guess=(padding, padding)):
     h, w = im.shape[:2]
@@ -21,17 +21,19 @@ def find_blobs(image):
     params = cv2.SimpleBlobDetector_Params()
 
     params.filterByArea = True
-    params.maxArea = 80
-    params.minArea = 6
+    params.maxArea = 60
+    params.minArea = 4
     params.minThreshold = 5
-    params.thresholdStep = 5
-    params.minRepeatability = 1
+    params.thresholdStep = 7
+    params.filterByCircularity = True
+    params.minCircularity = 0.7
+    params.minDistBetweenBlobs = 3
 
     detector = cv2.SimpleBlobDetector_create(params)
 
     return [(p.pt[0], p.pt[1]) for p in detector.detect(image)]
 
-def detect(image, mask_file=None, star_list=[], min_px_diff=14):
+def detect(image, mask_file=None, star_list=[], min_px_diff=14, max_stars=MAX_STARS_DEFAULT):
     image_inv = cv2.bitwise_not(image)
 
     mask = None
@@ -70,7 +72,7 @@ def detect(image, mask_file=None, star_list=[], min_px_diff=14):
             x, y = int(x) - padding + x0, int(y) - padding + y0
             duplicate = False
             for s in results:
-                if math.sqrt((x - s[0][0])**2 + (y - s[0][1])**2) < 10:
+                if math.sqrt((x - s[0][0])**2 + (y - s[0][1])**2) < 3:
                     print("DUPLICATE! Skipping star at point %s, %s" % (x, y))
                     duplicate = True
                     break
@@ -84,10 +86,10 @@ def detect(image, mask_file=None, star_list=[], min_px_diff=14):
     stars = []
     params = []
 
-    if len(results) > MAX_STARS:
+    if len(results) > max_stars:
         # Sort detections by amplitude and filter out the brightest stars
         results.sort(key=lambda r: r[1][2][0], reverse=True)
-        results = results[:MAX_STARS]
+        results = results[:max_stars]
         print("Returning %s stars" % len(results))
 
     stars = [r[0] for r in results]

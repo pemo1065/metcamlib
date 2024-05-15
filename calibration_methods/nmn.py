@@ -191,7 +191,7 @@ v
 
     # Returns the suggested iterations, and the reduction in fitting distance with each iteration
     def suggested_params(self):
-        return (5, 14, 2)
+        return (6, 14, 2)
 
     def calibrate(self, a=None, b=None, iter=None, curr_rms=None, last_rms=None):
         self.write_pto_file()
@@ -209,7 +209,7 @@ v
         self.tf.createTransform(img, self.pano.getOptions())
         self.itf = hsi.Transform()
         self.itf.createInvTransform(img, self.pano.getOptions())
-        return True
+        return last_rms is None or abs(last_rms - curr_rms) > 0.01
 
     def get_star_list(self):
         return [(s["image_star"][0], s["image_star"][1]) for s in self.star_pairs]

@@ -102,40 +102,27 @@ class Calibration:
 
     # Returns the suggested iterations, and the reduction in fitting distance with each iteration
     def suggested_params(self):
-        return (7, 8, 0)
+        return (5, 14, 1.6)
 
     def set_distortion_type(self, iter, last_rms, curr_rms):
-        if last_rms is None:
+        if iter < 3:
             self.platepar.distortion_type = "radial3-odd"
-            return
-        rms_improved = last_rms - curr_rms > 0.05
-        dist_type = self.platepar.distortion_type
-        #print("Current dist_type: %s" % dist_type)
-        if rms_improved:
-            return
+        elif iter < 4:
+            self.platepar.distortion_type = "radial5-odd"
         else:
-            if dist_type == "radial3-odd":
-                self.platepar.distortion_type = "radial5-odd"
-            else:
-                self.platepar.distortion_type = "radial7-odd"
+            self.platepar.distortion_type = "radial7-odd"
 
     def calibrate(self, c=[], i=[], iter=0, curr_rms=None, last_rms=None):
-        print("LAST: %s, CURR: %s" % (last_rms, curr_rms))
-        rms_changed = last_rms is None or abs(last_rms - curr_rms) > 0.05
         if len(self.star_pairs) > 0:
             c = np.array([(np.float64(p["catalog_star"][2]), np.float64(p["catalog_star"][3]), 0) for p in self.star_pairs])
             i = np.array([(np.float64(p["image_star"][0]), np.float64(p["image_star"][1]), 0) for p in self.star_pairs])
-        #if iter < 3 or curr_rms >= 10 and rms_changed:
-        #    self.platepar.distortion_type = "radial3-odd"
-        #elif iter < 4 or curr_rms >= 5 and (self.platepar.distortion_type != "radial5-odd" and rms_changed ):
-        #    self.platepar.distortion_type = "radial5-odd"
-        #else:
-        #    self.platepar.distortion_type = "radial7-odd"
-        if iter == 4:
-            print("Catalog: %s" % c.tolist())
-            print("Image: %s" % i.tolist())
         self.set_distortion_type(iter, last_rms, curr_rms)
         print("Using dist type %s" % self.platepar.distortion_type)
+
+        # Resetting the reverse polynomial seems to improve the calibration, though it is not clear why
+        self.platepar.x_poly_rev = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self.platepar.y_poly_rev = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
         self.platepar.fitAstrometry(self.platepar.JD, i, c, first_platepar_fit=True, fit_only_pointing=False, fixed_scale=False)
         self.platepar.fitAstrometry(self.platepar.JD, i, c, first_platepar_fit=False, fit_only_pointing=False, fixed_scale=False)
         with open(self.platepar_file, "w") as pp_file:
@@ -143,7 +130,7 @@ class Calibration:
         return True
 
     def get_pos(self):
-        return self.platepar.lat, self.platepar.lon, self.platepar.elev, self.timestamp
+        return self.platepar.lat, self.platepar.lon, float(self.platepar.elev), self.timestamp
     
     def set_star_pairs(self, pairs):
         self.star_pairs = pairs
