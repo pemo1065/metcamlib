@@ -17,7 +17,7 @@ pip install git+https://github.com/CroatianMeteorNetwork/RMS.git
 Then, clone the amscams repository:
 
 ```
-git clone https://github.com/Izbitzer/amscams.git
+git clone https://github.com/pemo1065/amscams.git
 ```
 
 ## Calibration
