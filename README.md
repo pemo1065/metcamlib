@@ -25,7 +25,7 @@ git clone https://github.com/Izbitzer/amscams.git
 Run the following command:
 
 ```
-python initial_calibration.py -t "2024-04-27 22:04:26" -i /path/to/image.png -m /path/to/mask.png -c <calibration_method> -l <lim-magnitude>
+python initial_calibration.py calibrate -t "2024-04-27 22:04:26" -i /path/to/image.png -m /path/to/mask.png -c <calibration_method> -l <lim-magnitude>
 ```
 
 `<calibration-mehod>` can be `nmn`, `rms` or `ams`.
